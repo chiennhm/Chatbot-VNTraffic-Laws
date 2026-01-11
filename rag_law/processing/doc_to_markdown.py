@@ -8,9 +8,19 @@ import argparse
 import os
 import re
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import DOC_DIR, MARKDOWN_DIR
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Configuration from environment
+RAG_LAW_DIR = Path(__file__).parent.parent
+PROJECT_ROOT = RAG_LAW_DIR.parent
+DOC_DIR = os.getenv("DOC_DIR", str(PROJECT_ROOT / "documents_doc"))
+MARKDOWN_DIR = os.getenv("MARKDOWN_DIR", str(PROJECT_ROOT / "documents_markdown"))
 
 def check_dependencies():
     """Check required packages"""

@@ -584,9 +584,19 @@ def save_chunks_csv(chunks: List[RAGChunk], output_path: str):
 
 import argparse
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import CLEAN_DIR, DATA_DIR
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Configuration from environment
+RAG_LAW_DIR = Path(__file__).parent.parent
+PROJECT_ROOT = RAG_LAW_DIR.parent
+CLEAN_DIR = os.getenv("CLEAN_DIR", str(PROJECT_ROOT / "documents_clean"))
+DATA_DIR = os.getenv("DATA_DIR", str(RAG_LAW_DIR / "structured_law"))
 
 def main() -> int:
     """Main function to parse all documents and generate output."""

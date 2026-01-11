@@ -196,7 +196,7 @@ def process_user_input(
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent / "rag_law"))
     
-    from rag.search import search_for_llm, search
+    from rag_law.rag.search import search_for_llm, search
     
     # Step 1: Summarize with VLM
     vlm_response = summarize_for_rag(

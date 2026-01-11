@@ -5,9 +5,18 @@ import logging
 import os
 import re
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import CLEAN_DIR
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Configuration from environment
+RAG_LAW_DIR = Path(__file__).parent.parent
+PROJECT_ROOT = RAG_LAW_DIR.parent
+CLEAN_DIR = os.getenv("CLEAN_DIR", str(PROJECT_ROOT / "documents_clean"))
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)

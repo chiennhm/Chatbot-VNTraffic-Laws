@@ -6,10 +6,18 @@ import json
 import logging
 import os
 import sys
+from pathlib import Path
 from typing import Callable, Dict, List
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import DATA_DIR
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Configuration from environment
+RAG_LAW_DIR = Path(__file__).parent.parent
+DATA_DIR = os.getenv("DATA_DIR", str(RAG_LAW_DIR / "structured_law"))
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)

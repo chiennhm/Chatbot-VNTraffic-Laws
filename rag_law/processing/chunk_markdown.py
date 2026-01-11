@@ -7,10 +7,21 @@ import os
 import re
 import sys
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import List, Optional, Tuple
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import MAX_CHUNK_CHARS, MARKDOWN_DIR, DATA_DIR
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+# Configuration from environment
+RAG_LAW_DIR = Path(__file__).parent.parent
+PROJECT_ROOT = RAG_LAW_DIR.parent
+MARKDOWN_DIR = os.getenv("MARKDOWN_DIR", str(PROJECT_ROOT / "documents_markdown"))
+DATA_DIR = os.getenv("DATA_DIR", str(RAG_LAW_DIR / "structured_law"))
+MAX_CHUNK_CHARS = int(os.getenv("MAX_CHUNK_CHARS", "1500"))
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger(__name__)

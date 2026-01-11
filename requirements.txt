@@ -1,0 +1,46 @@
+# Vietnamese Traffic Law Chatbot - All Dependencies
+# Install: pip install -r requirements.txt
+
+# ============================================
+# Backend API (FastAPI)
+# ============================================
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.6
+pydantic>=2.0.0
+
+# ============================================
+# RAG System
+# ============================================
+# Embeddings & ML
+sentence-transformers>=2.2.0   # Dense embeddings
+fastembed>=0.2.0               # Sparse embeddings (BM25)
+torch>=2.0.0                   # PyTorch backend
+
+# Vector Database
+qdrant-client>=1.7.0           # Qdrant vector database client
+
+# ============================================
+# Document Processing
+# ============================================
+python-docx>=1.0.0             # For .docx file processing
+pywin32>=306; sys_platform == 'win32'  # For .doc conversion (Windows only)
+
+# Web Crawling
+requests>=2.31.0               # HTTP requests
+beautifulsoup4>=4.12.0         # HTML parsing
+
+# ============================================
+# Utilities
+# ============================================
+tqdm>=4.66.0                   # Progress bars
+python-dotenv>=1.0.0           # Load environment variables from .env
+
+# ============================================
+# VLM (Vision-Language Model) - Optional
+# ============================================
+# Uncomment if using Qwen3-VL with Unsloth:
+unsloth
+transformers>=4.57.0
+accelerate
+bitsandbytes

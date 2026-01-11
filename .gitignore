@@ -1,0 +1,113 @@
+# ========================================
+# Environment & Secrets
+# ========================================
+.env
+.env.local
+.env.*.local
+*.env
+
+# ========================================
+# Python
+# ========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+env/
+*.pyo
+*.pyd
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# ========================================
+# Node.js / Next.js (Frontend)
+# ========================================
+node_modules/
+.next/
+out/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+
+# ========================================
+# IDE & Editor
+# ========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========================================
+# Logs
+# ========================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ========================================
+# RAG Data (Large files & Generated data)
+# ========================================
+rag_law/traffic_regulations/
+rag_law/structured_law/
+rag_law/documents_clean/
+rag_law/documents_markdown/
+rag_law/documents_vn/
+rag_law/images/
+
+# ========================================
+# Deprecated/Unused scripts
+# ========================================
+rag_law/processing/merge_vlsp_chunks.py
+rag_law/processing/process_qcvn.py
+rag_law/rag/qdrant_rag.py
+rag_law/check_split.py
+
+# ========================================
+# Testing & Coverage
+# ========================================
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ========================================
+# Build artifacts
+# ========================================
+*.manifest
+*.spec
+
+# ========================================
+# Misc
+# ========================================
+*.bak
+*.tmp
+*.temp

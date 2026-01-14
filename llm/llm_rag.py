@@ -257,12 +257,17 @@ def generate_answer(
         model, tokenizer = get_model()
         prompts = load_prompts()
         
-        # Build prompt with context
-        answer_config = prompts["answer_with_context"]
-        full_prompt = answer_config["template"].format(
-            context=context,
-            question=question
-        )
+        # Build prompt with context using answer_theory_logic instruction
+        answer_instruction = prompts["answer_theory_logic"]["instruction"]
+        full_prompt = f"""{answer_instruction}
+
+### THÔNG TIN PHÁP LÝ LIÊN QUAN:
+{context}
+
+### CÂU HỎI CỦA NGƯỜI DÙNG:
+{question}
+
+Hãy trả lời câu hỏi dựa trên thông tin pháp lý ở trên. Trích dẫn Điều, Khoản cụ thể khi cần thiết."""
         
         content = []
         if image_path:

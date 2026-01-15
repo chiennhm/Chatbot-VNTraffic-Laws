@@ -362,15 +362,26 @@ def generate_answer(
     """
     prompts = load_prompts()
     system_prompt = prompts.get("system_prompt", "")
+    gen_config = prompts.get("generation_config", {})
+    syllogism = prompts.get("syllogism_reasoning", {})
     
-    # Build prompt with context
-    full_prompt = f"""### THÔNG TIN PHÁP LÝ LIÊN QUAN:
+    # Build prompt with context and syllogism format
+    syllogism_instruction = syllogism.get("instruction", "")
+    syllogism_template = syllogism.get("template", "")
+    
+    full_prompt = f"""### THÔNG TIN PHÁP LÝ TỪ CƠ SỞ DỮ LIỆU:
 {context}
 
 ### CÂU HỎI CỦA NGƯỜI DÙNG:
 {question}
 
-Hãy trả lời câu hỏi dựa trên thông tin pháp lý ở trên. Trích dẫn Điều, Khoản cụ thể."""
+### HƯỚNG DẪN TRẢ LỜI:
+{syllogism_instruction}
+
+Định dạng:
+{syllogism_template}
+
+Hãy trả lời dựa trên thông tin pháp lý ở trên. Nếu không có thông tin, nói rõ."""
 
     response = generate(
         prompt=full_prompt,
@@ -474,7 +485,8 @@ def full_pipeline(
     # =========================================================================
     log.info(f"[Pipeline] Step 2: Searching RAG with summarized query")
     
-    results = search(rag_query, top_k=top_k)
+    # Retrieve more candidates, then re-rank for better results
+    results = search(rag_query, top_k=top_k, retrieval_limit=100, rerank_limit=50)
     context = search_for_llm(rag_query, top_k=top_k)
     
     log.info(f"[Pipeline] RAG returned {len(results)} results")

@@ -29,12 +29,16 @@
         "instruction": "Bạn là Chuyên gia Quy chuẩn Biển báo. Phân tích hình ảnh/tình huống dựa trên QCVN 41 và Luật.",
         "template": "### PHÂN TÍCH PHÁP LÝ:\n1. **Nhận diện biển báo/vạch kẻ:** Theo **QCVN 41:2019**, đây là biển {sign_code} - {sign_name}.\n   - **Ý nghĩa:** {sign_meaning}\n2. **Quy tắc giao thông:** Áp dụng nguyên tắc {rule_name} trong Luật (VD: Nhường đường cho xe ưu tiên, nhường bên phải...).\n\n### KẾT LUẬN:\n{conclusion}\n\n### LƯU Ý KHI LÁI XE:\n{practical_note}"
     },
+    "syllogism_reasoning": {
+        "instruction": "Sử dụng phương pháp lập luận tam đoạn luận (syllogism) để phân tích câu hỏi pháp lý.",
+        "template": "<think>[Suy nghĩ về vấn đề]</think>\n\n<answer>\n<major_premise>[Quy định pháp luật chung từ context]</major_premise>\n<minor_premise>[Sự kiện cụ thể trong câu hỏi]</minor_premise>\n<conclusion>[Áp dụng quy định vào sự kiện để đưa ra kết luận]</conclusion>\n</answer>"
+    },
     "generation_config": {
         "max_new_tokens": 1500,
         "temperature": 0.1,
         "top_p": 0.9,
         "do_sample": true,
         "repetition_penalty": 1.2,
-        "no_repeat_ngram_size": 4
+        "no_repeat_ngram_size": 0
     }
 }

@@ -37,10 +37,16 @@ tqdm>=4.66.0                   # Progress bars
 python-dotenv>=1.0.0           # Load environment variables from .env
 
 # ============================================
-# VLM (Vision-Language Model) - Optional
+# LLM - Google Gemini (Default)
 # ============================================
-# Uncomment if using Qwen3-VL with Unsloth:
-unsloth
-transformers>=4.57.0
-accelerate
-bitsandbytes
+google-genai>=1.0.0            # Google Gemini API client
+
+# ============================================
+# LLM - Local VLM (Optional)
+# ============================================
+# Required only if using LLM_PROVIDER=local
+# Uncomment these if using Qwen3-VL with Unsloth:
+# unsloth
+# transformers>=4.57.0
+# accelerate
+# bitsandbytes

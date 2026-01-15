@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import ChatShell from "@/components/chat/ChatShell";
+import ChatShell, { type LLMProvider } from "@/components/chat/ChatShell";
 import Sidebar from "@/components/layout/Sidebar";
 import { type ChatSession, type Msg } from "@/components/chat/types";
 import { cn } from "@/lib/utils/cn";
@@ -18,6 +18,7 @@ function uid() {
 export default function HomePage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [llmProvider, setLlmProvider] = useState<LLMProvider>("gemini");
 
   // Load sessions on mount
   useEffect(() => {
@@ -86,14 +87,15 @@ export default function HomePage() {
     );
 
     try {
-      // Call the API
+      // Call the API with provider
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text,
           attachments,
-          history: activeSession?.messages || [], // Optional: send history if needed
+          provider: llmProvider,
+          history: activeSession?.messages || [],
         }),
       });
 
@@ -183,6 +185,8 @@ export default function HomePage() {
                 onSendMsg={handleSendMsg}
                 onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
                 isSidebarOpen={isSidebarOpen}
+                llmProvider={llmProvider}
+                onProviderChange={setLlmProvider}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-zinc-500">

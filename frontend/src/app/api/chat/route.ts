@@ -6,11 +6,16 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
 
-        // Proxy to Python backend
+        // Proxy to Python backend with provider
         const response = await fetch(`${BACKEND_URL}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify({
+                text: body.text,
+                attachments: body.attachments,
+                history: body.history,
+                provider: body.provider || "gemini",
+            }),
         });
 
         if (!response.ok) {

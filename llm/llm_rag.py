@@ -1,38 +1,40 @@
 # -*- coding: utf-8 -*-
 """
-Qwen3-VL-8B Vision-Language Model for RAG Integration.
-Summarizes user input (image + text) for traffic law search.
+LLM Integration for Vietnamese Traffic Law RAG.
+Supports: Google Gemini API (default) and Local VLM (Qwen3-VL-8B).
 """
-from unsloth import FastVisionModel
+
 import os
 import json
 import logging
+import base64
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from dataclasses import dataclass
-
-import torch
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # Configuration
-MODEL_ID = os.getenv("VLM_MODEL_ID", "unsloth/Qwen3-VL-8B-Instruct-unsloth-bnb-4bit")
-LORA_PATH = os.getenv("VLM_LORA_PATH", None)  # Optional: path to fine-tuned LoRA
-LOAD_IN_4BIT = os.getenv("VLM_LOAD_4BIT", "true").lower() == "true"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # "gemini" or "local"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+VLM_MODEL_ID = os.getenv("VLM_MODEL_ID", "unsloth/Qwen3-VL-8B-Instruct-unsloth-bnb-4bit")
+VLM_LORA_PATH = os.getenv("VLM_LORA_PATH", None)
+VLM_LOAD_4BIT = os.getenv("VLM_LOAD_4BIT", "true").lower() == "true"
 PROMPTS_FILE = Path(__file__).parent / "prompts.json"
 
-# Global model cache
-_model = None
-_tokenizer = None
+# Global cache
+_gemini_client = None
+_local_model = None
+_local_tokenizer = None
 _prompts = None
 
 
 @dataclass
-class VLMResponse:
-    """Response from VLM inference."""
-    query: str  # Summarized query for RAG
-    raw_output: str  # Full model output
+class LLMResponse:
+    """Response from LLM inference."""
+    text: str
     success: bool
     error: Optional[str] = None
 
@@ -46,180 +48,413 @@ def load_prompts() -> Dict[str, Any]:
     return _prompts
 
 
-def get_model():
-    """Load and cache the VLM model."""
-    global _model, _tokenizer
+# =============================================================================
+# Gemini API
+# =============================================================================
+
+def get_gemini_client():
+    """Get or create Gemini client."""
+    global _gemini_client
+    if _gemini_client is None:
+        from google import genai
+        if not GEMINI_API_KEY:
+            raise ValueError("GEMINI_API_KEY must be set")
+        _gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        log.info(f"Gemini client initialized with model: {GEMINI_MODEL}")
+    return _gemini_client
+
+
+def _image_to_base64(image_path: str) -> str:
+    """Convert image file to base64 string."""
+    with open(image_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+
+def _get_image_mime_type(image_path: str) -> str:
+    """Get MIME type from image file extension."""
+    ext = Path(image_path).suffix.lower()
+    mime_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+    }
+    return mime_types.get(ext, "image/jpeg")
+
+
+def generate_with_gemini(
+    prompt: str,
+    system_prompt: Optional[str] = None,
+    image_path: Optional[str] = None,
+) -> LLMResponse:
+    """
+    Generate response using Gemini API.
     
-    if _model is not None:
-        return _model, _tokenizer
+    Args:
+        prompt: User prompt
+        system_prompt: Optional system instruction
+        image_path: Optional path to image file
     
-    log.info(f"Loading model: {MODEL_ID}")
+    Returns:
+        LLMResponse with generated text
+    """
+    try:
+        from google.genai import types
+        
+        client = get_gemini_client()
+        
+        # Build contents
+        contents = []
+        
+        # Add image if provided
+        if image_path and os.path.exists(image_path):
+            image_data = _image_to_base64(image_path)
+            mime_type = _get_image_mime_type(image_path)
+            contents.append(
+                types.Part.from_bytes(
+                    data=base64.b64decode(image_data),
+                    mime_type=mime_type
+                )
+            )
+        
+        # Add text prompt
+        contents.append(prompt)
+        
+        # Generate config
+        prompts = load_prompts()
+        gen_config = prompts.get("generation_config", {})
+        
+        config = types.GenerateContentConfig(
+            temperature=gen_config.get("temperature", 0.1),
+            top_p=gen_config.get("top_p", 0.9),
+            max_output_tokens=gen_config.get("max_new_tokens", 1500),
+        )
+        
+        # Add system instruction if provided
+        if system_prompt:
+            config.system_instruction = system_prompt
+        
+        # Generate
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=contents,
+            config=config,
+        )
+        
+        return LLMResponse(
+            text=response.text,
+            success=True
+        )
+        
+    except Exception as e:
+        log.error(f"Gemini generation failed: {e}")
+        return LLMResponse(
+            text="",
+            success=False,
+            error=str(e)
+        )
+
+
+# =============================================================================
+# Local VLM (Qwen3-VL-8B with Unsloth)
+# =============================================================================
+
+def get_local_model():
+    """Load and cache the local VLM model."""
+    global _local_model, _local_tokenizer
     
-    if LORA_PATH and os.path.exists(LORA_PATH):
-        log.info(f"Loading LoRA adapter from: {LORA_PATH}")
+    if _local_model is not None:
+        return _local_model, _local_tokenizer
+    
+    from unsloth import FastVisionModel
+    import torch
+    
+    log.info(f"Loading local model: {VLM_MODEL_ID}")
+    
+    if VLM_LORA_PATH and os.path.exists(VLM_LORA_PATH):
+        log.info(f"Loading LoRA adapter from: {VLM_LORA_PATH}")
         model, tokenizer = FastVisionModel.from_pretrained(
-            model_name=LORA_PATH,
-            load_in_4bit=LOAD_IN_4BIT,
+            model_name=VLM_LORA_PATH,
+            load_in_4bit=VLM_LOAD_4BIT,
         )
     else:
         model, tokenizer = FastVisionModel.from_pretrained(
-            MODEL_ID,
-            load_in_4bit=LOAD_IN_4BIT,
+            VLM_MODEL_ID,
+            load_in_4bit=VLM_LOAD_4BIT,
             use_gradient_checkpointing="unsloth",
         )
     
     FastVisionModel.for_inference(model)
     
-    _model = model
-    _tokenizer = tokenizer
+    _local_model = model
+    _local_tokenizer = tokenizer
     
-    log.info("Model loaded successfully")
+    log.info("Local model loaded successfully")
     return model, tokenizer
 
 
-def summarize_for_rag(
+def generate_with_local_vlm(
+    prompt: str,
+    system_prompt: Optional[str] = None,
     image_path: Optional[str] = None,
-    user_text: str = "",
-    image_url: Optional[str] = None,
-) -> VLMResponse:
+) -> LLMResponse:
     """
-    Analyze image and text, generate a summarized query for RAG search.
+    Generate response using local VLM.
     
     Args:
-        image_path: Local path to image file
-        user_text: User's text input/question
-        image_url: URL to image (alternative to image_path)
+        prompt: User prompt
+        system_prompt: Optional system instruction
+        image_path: Optional path to image file
     
     Returns:
-        VLMResponse with summarized query for RAG
+        LLMResponse with generated text
     """
     try:
-        model, tokenizer = get_model()
-        prompts = load_prompts()
+        import torch
         
-        # Build instruction
-        instruction = prompts["summarize_for_rag"]["instruction"]
-        if user_text:
-            instruction = f"{instruction}\n\nCâu hỏi của người dùng: {user_text}"
+        model, tokenizer = get_local_model()
+        prompts = load_prompts()
         
         # Build message content
         content = []
-        
-        # Add image if provided
-        if image_path or image_url:
+        if image_path and os.path.exists(image_path):
             content.append({"type": "image"})
+        content.append({"type": "text", "text": prompt})
         
-        content.append({"type": "text", "text": instruction})
-        
-        messages = [{"role": "user", "content": content}]
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": content})
         
         # Prepare inputs
         input_text = tokenizer.apply_chat_template(
-            messages, 
+            messages,
             add_generation_prompt=True
         )
         
-        # Handle image input
-        image_input = image_path or image_url
-        if image_input:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        
+        if image_path and os.path.exists(image_path):
             inputs = tokenizer(
-                image_input,
+                image_path,
                 input_text,
                 add_special_tokens=False,
                 return_tensors="pt",
-            ).to("cuda" if torch.cuda.is_available() else "cpu")
+            ).to(device)
         else:
-            # Text-only: use text= kwarg to avoid confusion with image input
             inputs = tokenizer(
                 text=input_text,
                 add_special_tokens=False,
                 return_tensors="pt",
-            ).to("cuda" if torch.cuda.is_available() else "cpu")
+            ).to(device)
         
         # Generate
         gen_config = prompts.get("generation_config", {})
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=gen_config.get("max_new_tokens", 256),
-                temperature=gen_config.get("temperature", 0.2),
-                top_p=gen_config.get("top_p", 0.8),
+                max_new_tokens=gen_config.get("max_new_tokens", 1500),
+                temperature=gen_config.get("temperature", 0.1),
+                top_p=gen_config.get("top_p", 0.9),
                 do_sample=gen_config.get("do_sample", True),
-                repetition_penalty=gen_config.get("repetition_penalty", 1.15),
+                repetition_penalty=gen_config.get("repetition_penalty", 1.2),
                 no_repeat_ngram_size=gen_config.get("no_repeat_ngram_size", 4),
                 use_cache=True,
             )
         
         # Decode output
         raw_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        # Extract only the generated part (after the prompt)
         prompt_text = tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        query = raw_output[len(prompt_text):].strip()
+        answer = raw_output[len(prompt_text):].strip()
         
-        # Clean up query - remove any thinking tags if present
-        if "<think>" in query and "</think>" in query:
-            think_end = query.find("</think>") + len("</think>")
-            query = query[think_end:].strip()
+        # Clean up thinking tags
+        if "<think>" in answer and "</think>" in answer:
+            think_end = answer.find("</think>") + len("</think>")
+            answer = answer[think_end:].strip()
         
-        return VLMResponse(
-            query=query,
-            raw_output=raw_output,
+        return LLMResponse(
+            text=answer,
             success=True
         )
         
     except Exception as e:
-        log.error(f"VLM inference failed: {e}")
-        return VLMResponse(
-            query="",
-            raw_output="",
+        log.error(f"Local VLM generation failed: {e}")
+        return LLMResponse(
+            text="",
             success=False,
             error=str(e)
         )
 
 
-def process_user_input(
+# =============================================================================
+# Unified Interface
+# =============================================================================
+
+def generate(
+    prompt: str,
+    system_prompt: Optional[str] = None,
     image_path: Optional[str] = None,
-    user_text: str = "",
-    top_k: int = 5,
-) -> Dict[str, Any]:
+    provider: Optional[str] = None,
+) -> LLMResponse:
     """
-    Full pipeline: Summarize input with VLM, then search RAG.
+    Generate response using configured LLM provider.
     
     Args:
-        image_path: Path to user's image
-        user_text: User's text question
-        top_k: Number of RAG results to return
+        prompt: User prompt
+        system_prompt: Optional system instruction
+        image_path: Optional path to image file
+        provider: Override LLM_PROVIDER ("gemini" or "local")
     
     Returns:
-        Dict with query, rag_results, and context
+        LLMResponse with generated text
+    """
+    provider = provider or LLM_PROVIDER
+    
+    if provider == "gemini":
+        return generate_with_gemini(prompt, system_prompt, image_path)
+    elif provider == "local":
+        return generate_with_local_vlm(prompt, system_prompt, image_path)
+    else:
+        return LLMResponse(
+            text="",
+            success=False,
+            error=f"Unknown provider: {provider}"
+        )
+
+
+def generate_answer(
+    question: str,
+    context: str,
+    image_path: Optional[str] = None,
+    provider: Optional[str] = None,
+) -> str:
+    """
+    Generate answer for user question with RAG context.
+    
+    Args:
+        question: User's question
+        context: Retrieved context from RAG
+        image_path: Optional image for reference
+        provider: LLM provider ("gemini" or "local")
+    
+    Returns:
+        Generated answer string
+    """
+    prompts = load_prompts()
+    system_prompt = prompts.get("system_prompt", "")
+    
+    # Build prompt with context
+    full_prompt = f"""### THÔNG TIN PHÁP LÝ LIÊN QUAN:
+{context}
+
+### CÂU HỎI CỦA NGƯỜI DÙNG:
+{question}
+
+Hãy trả lời câu hỏi dựa trên thông tin pháp lý ở trên. Trích dẫn Điều, Khoản cụ thể."""
+
+    response = generate(
+        prompt=full_prompt,
+        system_prompt=system_prompt,
+        image_path=image_path,
+        provider=provider,
+    )
+    
+    if response.success:
+        return response.text
+    else:
+        return f"Lỗi: {response.error}"
+
+
+def summarize_for_rag(
+    user_text: str = "",
+    image_path: Optional[str] = None,
+    provider: Optional[str] = None,
+) -> LLMResponse:
+    """
+    Summarize user input into a search query for RAG.
+    
+    Args:
+        user_text: User's text input
+        image_path: Optional path to image file
+        provider: LLM provider ("gemini" or "local")
+    
+    Returns:
+        LLMResponse with summarized query
+    """
+    prompts = load_prompts()
+    instruction = prompts["summarize_for_rag"]["instruction"]
+    
+    if user_text:
+        prompt = f"{instruction}\n\nCâu hỏi của người dùng: {user_text}"
+    else:
+        prompt = instruction
+    
+    return generate(
+        prompt=prompt,
+        image_path=image_path,
+        provider=provider,
+    )
+
+
+def full_pipeline(
+    user_text: str = "",
+    image_path: Optional[str] = None,
+    top_k: int = 5,
+    provider: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Complete end-to-end pipeline.
+    
+    1. Summarize user input into query (if image provided)
+    2. Search RAG with query
+    3. Generate final answer with context
+    
+    Args:
+        user_text: User's text question
+        image_path: Optional path to image file
+        top_k: Number of RAG results
+        provider: LLM provider ("gemini" or "local")
+    
+    Returns:
+        Dict with query, context, rag_results, and answer
     """
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent / "rag_law"))
     
     from rag_law.rag.search import search_for_llm, search
     
-    # Step 1: Summarize with VLM
-    vlm_response = summarize_for_rag(
-        image_path=image_path,
-        user_text=user_text
-    )
+    # Step 1: Determine query
+    if image_path:
+        # Use VLM to summarize image + text
+        summary = summarize_for_rag(user_text=user_text, image_path=image_path, provider=provider)
+        if not summary.success:
+            return {
+                "success": False,
+                "error": summary.error,
+                "query": None,
+                "rag_results": [],
+                "context": "",
+                "answer": ""
+            }
+        query = summary.text
+    else:
+        # Text-only: use directly
+        query = user_text
     
-    if not vlm_response.success:
-        return {
-            "success": False,
-            "error": vlm_response.error,
-            "query": None,
-            "rag_results": [],
-            "context": ""
-        }
-    
-    query = vlm_response.query
-    log.info(f"Generated RAG query: {query}")
+    log.info(f"RAG Query: {query[:100]}...")
     
     # Step 2: Search RAG
     results = search(query, top_k=top_k)
     context = search_for_llm(query, top_k=top_k)
+    
+    # Step 3: Generate answer
+    answer = generate_answer(
+        question=user_text or query,
+        context=context,
+        image_path=image_path,
+        provider=provider,
+    )
     
     return {
         "success": True,
@@ -234,179 +469,46 @@ def process_user_input(
             }
             for r in results
         ],
-        "context": context
-    }
-
-
-def generate_answer(
-    question: str,
-    context: str,
-    image_path: Optional[str] = None,
-) -> str:
-    """
-    Generate final answer using VLM with RAG context.
-    
-    Args:
-        question: User's original question
-        context: Retrieved context from RAG
-        image_path: Optional image for reference
-    
-    Returns:
-        Generated answer string
-    """
-    try:
-        model, tokenizer = get_model()
-        prompts = load_prompts()
-        
-        # Build prompt with context using answer_theory_logic instruction
-        answer_instruction = prompts["answer_theory_logic"]["instruction"]
-        full_prompt = f"""{answer_instruction}
-
-### THÔNG TIN PHÁP LÝ LIÊN QUAN:
-{context}
-
-### CÂU HỎI CỦA NGƯỜI DÙNG:
-{question}
-
-Hãy trả lời câu hỏi dựa trên thông tin pháp lý ở trên. Trích dẫn Điều, Khoản cụ thể khi cần thiết."""
-        
-        content = []
-        if image_path:
-            content.append({"type": "image"})
-        content.append({"type": "text", "text": full_prompt})
-        
-        messages = [
-            {"role": "system", "content": prompts["system_prompt"]},
-            {"role": "user", "content": content}
-        ]
-        
-        input_text = tokenizer.apply_chat_template(
-            messages,
-            add_generation_prompt=True
-        )
-        
-        if image_path:
-            inputs = tokenizer(
-                image_path,
-                input_text,
-                add_special_tokens=False,
-                return_tensors="pt",
-            ).to("cuda" if torch.cuda.is_available() else "cpu")
-        else:
-            # Text-only: use text= kwarg to avoid confusion with image input
-            inputs = tokenizer(
-                text=input_text,
-                add_special_tokens=False,
-                return_tensors="pt",
-            ).to("cuda" if torch.cuda.is_available() else "cpu")
-        
-        gen_config = prompts.get("generation_config", {})
-        with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=gen_config.get("max_new_tokens", 1500),
-                temperature=gen_config.get("temperature", 0.2),
-                top_p=gen_config.get("top_p", 0.8),
-                do_sample=gen_config.get("do_sample", True),
-                repetition_penalty=gen_config.get("repetition_penalty", 1.15),
-                no_repeat_ngram_size=gen_config.get("no_repeat_ngram_size", 4),
-                use_cache=True,
-            )
-        
-        raw_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        prompt_text = tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
-        answer = raw_output[len(prompt_text):].strip()
-        
-        # Clean up thinking tags
-        if "<think>" in answer and "</think>" in answer:
-            think_end = answer.find("</think>") + len("</think>")
-            answer = answer[think_end:].strip()
-        
-        return answer
-        
-    except Exception as e:
-        log.error(f"Answer generation failed: {e}")
-        return f"Lỗi: {e}"
-
-
-def full_pipeline(
-    image_path: Optional[str] = None,
-    user_text: str = "",
-    top_k: int = 5,
-) -> Dict[str, Any]:
-    """
-    Complete end-to-end pipeline.
-    
-    1. Summarize user input (image + text) with VLM
-    2. Search RAG with summarized query
-    3. Generate final answer with VLM + RAG context
-    
-    Args:
-        image_path: Path to user's image
-        user_text: User's text question  
-        top_k: Number of RAG results
-    
-    Returns:
-        Dict with query, context, and answer
-    """
-    # Step 1 & 2: Get RAG results
-    rag_result = process_user_input(
-        image_path=image_path,
-        user_text=user_text,
-        top_k=top_k
-    )
-    
-    if not rag_result["success"]:
-        return rag_result
-    
-    # Step 3: Generate answer
-    answer = generate_answer(
-        question=user_text or rag_result["query"],
-        context=rag_result["context"],
-        image_path=image_path
-    )
-    
-    return {
-        **rag_result,
+        "context": context,
         "answer": answer
     }
 
 
+def preload_models():
+    """Preload LLM models based on provider."""
+    if LLM_PROVIDER == "gemini":
+        get_gemini_client()
+    elif LLM_PROVIDER == "local":
+        get_local_model()
+    log.info(f"LLM provider '{LLM_PROVIDER}' initialized")
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="VLM + RAG for Traffic Law")
+    parser = argparse.ArgumentParser(description="LLM + RAG for Traffic Law")
+    parser.add_argument("--text", "-t", type=str, required=True, help="User question")
     parser.add_argument("--image", "-i", type=str, help="Path to image file")
-    parser.add_argument("--text", "-t", type=str, default="", help="User question")
     parser.add_argument("--top-k", "-k", type=int, default=5, help="Number of RAG results")
-    parser.add_argument("--mode", "-m", choices=["summarize", "search", "full"], 
-                       default="full", help="Pipeline mode")
+    parser.add_argument("--provider", "-p", choices=["gemini", "local"], help="LLM provider")
     
     args = parser.parse_args()
     
-    if not args.image and not args.text:
-        parser.error("At least --image or --text must be provided")
+    if args.provider:
+        os.environ["LLM_PROVIDER"] = args.provider
     
-    print("Loading models...")
+    print(f"Using provider: {LLM_PROVIDER}")
+    print("Running pipeline...")
     
-    if args.mode == "summarize":
-        result = summarize_for_rag(image_path=args.image, user_text=args.text)
-        print(f"\nGenerated Query: {result.query}")
-        
-    elif args.mode == "search":
-        result = process_user_input(
-            image_path=args.image,
-            user_text=args.text,
-            top_k=args.top_k
-        )
-        print(f"\nQuery: {result['query']}")
-        print(f"\nRAG Context:\n{result['context']}")
-        
-    else:  # full
-        result = full_pipeline(
-            image_path=args.image,
-            user_text=args.text,
-            top_k=args.top_k
-        )
-        print(f"\nQuery: {result['query']}")
-        print(f"\nAnswer:\n{result['answer']}")
+    result = full_pipeline(
+        user_text=args.text,
+        image_path=args.image,
+        top_k=args.top_k
+    )
+    
+    print(f"\nQuery: {result.get('query', 'N/A')}")
+    print(f"\nAnswer:\n{result.get('answer', 'N/A')}")

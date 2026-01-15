@@ -1,19 +1,25 @@
 # Vietnamese Traffic Law Chatbot 🚗
 
-AI-powered chatbot for Vietnamese traffic law questions using Vision-Language Model (Qwen3-VL-8B) and RAG (Retrieval-Augmented Generation).
+AI-powered chatbot for Vietnamese traffic law questions using **Google Gemini** or **Local VLM (Qwen3-VL-8B)** with RAG (Retrieval-Augmented Generation).
+
+## ✨ Features
+
+- **Dual LLM Support**: Switch between Gemini API (fast, cloud) and Local VLM (private, GPU)
+- **Hybrid RAG Search**: Dense + Sparse vectors with Re-ranking
+- **Vietnamese Legal Focus**: Trained on Vietnamese traffic law documents
+- **Vision Support**: Upload images for traffic sign recognition (Local VLM only)
+- **Modern UI**: Next.js frontend with real-time chat
 
 ## 📁 Project Structure
 
 ```
 traffic_law/
 ├── backend/          # FastAPI server
-│   ├── main.py       # API endpoints: /chat, /search
-│   └── requirements.txt
+│   └── main.py       # API endpoints: /chat, /search
 ├── frontend/         # Next.js web UI
-│   ├── src/
-│   └── package.json
-├── llm/              # Vision-Language Model module
-│   ├── llm_rag.py    # Qwen3-VL inference
+│   └── src/
+├── llm/              # LLM integration module
+│   ├── llm_rag.py    # Gemini + Local VLM support
 │   └── prompts.json  # Prompt templates
 └── rag_law/          # RAG system
     ├── rag/          # Search & upload scripts
@@ -26,8 +32,9 @@ traffic_law/
 
 - Python 3.10+
 - Node.js 18+
-- CUDA-capable GPU (optional, for VLM)
+- CUDA-capable GPU (optional, for Local VLM)
 - Qdrant Cloud account
+- Google Gemini API key (for Gemini provider)
 
 ### 1. Clone Repository
 
@@ -40,39 +47,20 @@ cd traffic_law
 
 ```bash
 # Create .env file
-cp rag_law/.env.example .env
+cp .env.example .env
 
 # Edit with your credentials
 nano .env
 ```
 
-**Required environment variables:**
-
-```env
-# Qdrant Cloud
-QDRANT_URL=https://your-cluster.qdrant.io:6333
-QDRANT_API_KEY=your-api-key
-QDRANT_COLLECTION=VN_traffic_regulation_md_hybrid
-
-# Embedding Models
-DENSE_MODEL_ID=Savoxism/vietnamese-legal-embedding-finetuned
-SPARSE_MODEL_ID=Qdrant/bm25
-RERANK_MODEL_ID=namdp-ptit/ViRanker
-
-# Optional: VLM settings
-USE_VLM=true
-VLM_MODEL_ID=unsloth/Qwen3-VL-8B-Instruct-unsloth-bnb-4bit
-```
-
 ### 3. Install Dependencies
 
 ```bash
-# Python dependencies (from project root)
+# Python dependencies
 pip install -r requirements.txt
 
 # Frontend
-cd frontend
-npm install
+cd frontend && npm install
 ```
 
 ### 4. Run Application
@@ -81,7 +69,6 @@ npm install
 ```bash
 cd backend
 python main.py
-#or using: uvicorn main:app --host 0.0.0.0 --port 8000
 # Server starts at http://localhost:8000
 ```
 
@@ -92,40 +79,36 @@ npm run dev
 # UI available at http://localhost:3000
 ```
 
-## ☁️ Cloud Deployment
+## ⚙️ Configuration
 
-### Deploy to Railway/Render
+### LLM Providers
 
-1. **Backend:**
-   - Connect GitHub repo
-   - Set build command: `pip install -r backend/requirements.txt -r rag_law/requirements.txt`
-   - Set start command: `python backend/main.py`
-   - Add environment variables from `.env`
+| Provider | Description | Requirements |
+|----------|-------------|--------------|
+| `gemini` | Google Gemini API (default) | `GEMINI_API_KEY` |
+| `local` | Qwen3-VL-8B on local GPU | CUDA GPU, unsloth |
 
-2. **Frontend:**
-   - Set build command: `npm install && npm run build`
-   - Set start command: `npm start`
-   - Set `BACKEND_URL` to your backend URL
-
-### Deploy to Google Cloud Run
-
-```bash
-# Build and push backend
-gcloud builds submit --tag gcr.io/PROJECT_ID/traffic-chatbot-backend
-
-# Deploy
-gcloud run deploy traffic-chatbot-backend \
-  --image gcr.io/PROJECT_ID/traffic-chatbot-backend \
-  --platform managed \
-  --allow-unauthenticated \
-  --set-env-vars "QDRANT_URL=xxx,QDRANT_API_KEY=xxx"
+**Switch provider in `.env`:**
+```env
+LLM_PROVIDER=gemini  # or "local"
 ```
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_PROVIDER` | `gemini` | LLM provider: "gemini" or "local" |
+| `GEMINI_API_KEY` | - | Google Gemini API key |
+| `GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model name |
+| `USE_VLM` | `true` | Enable VLM for image support |
+| `QDRANT_URL` | - | Qdrant Cloud URL |
+| `QDRANT_API_KEY` | - | Qdrant API key |
 
 ## 📡 API Reference
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/chat` | POST | Chat with VLM + RAG |
+| `/chat` | POST | Chat with LLM + RAG |
 | `/search` | POST | Direct RAG search |
 | `/health` | GET | Health check |
 
@@ -136,7 +119,7 @@ curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Mức phạt không đội mũ bảo hiểm?",
-    "attachments": []
+    "provider": "gemini"
   }'
 ```
 
@@ -149,33 +132,15 @@ curl -X POST http://localhost:8000/chat \
 }
 ```
 
-## ⚙️ Configuration
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKEND_HOST` | `0.0.0.0` | Backend host |
-| `BACKEND_PORT` | `8000` | Backend port |
-| `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
-| `USE_VLM` | `true` | Enable Vision-Language Model |
-| `VLM_LOAD_4BIT` | `true` | Load VLM in 4-bit quantization |
-
 ## 🔧 Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| CORS errors | Check `FRONTEND_URL` matches your frontend |
-| VLM not loading | Ensure CUDA is available, or set `USE_VLM=false` |
+| Gemini API error | Check `GEMINI_API_KEY` is valid |
+| Local VLM not loading | Ensure CUDA is available, or use `LLM_PROVIDER=gemini` |
 | RAG returns empty | Verify Qdrant credentials and collection exists |
-| Slow first request | Models loading on first call, subsequent calls faster |
+| CORS errors | Check `FRONTEND_URL` matches your frontend |
 
 ## 📄 License
 
 MIT License
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request

@@ -6,24 +6,23 @@ import MessageList from "./MessageList";
 import ChatComposer from "./ChatComposer";
 import type { Msg } from "./types";
 
-function uid() {
-    return Math.random().toString(16).slice(2) + Date.now().toString(16);
-}
+export type LLMProvider = "gemini" | "local";
 
 export default function ChatShell({
     messages,
     onSendMsg,
     onToggleSidebar,
     isSidebarOpen,
+    llmProvider = "gemini",
+    onProviderChange,
 }: {
     messages: Msg[];
     onSendMsg: (text: string, attachments: string[]) => Promise<void>;
     onToggleSidebar?: () => void;
     isSidebarOpen?: boolean;
+    llmProvider?: LLMProvider;
+    onProviderChange?: (provider: LLMProvider) => void;
 }) {
-    // We can keep 'thinking' state local for UI effect, 
-    // or lift it if we want global loading state. 
-    // For now, local is fine as it acts per shell view.
     const [thinking, setThinking] = useState(false);
 
     const handleSend = async (text: string, attachments: string[]) => {
@@ -54,12 +53,13 @@ export default function ChatShell({
             overflow-hidden
         "
         >
-            <ChatHeader onToggleSidebar={onToggleSidebar} isSidebarOpen={isSidebarOpen} />
+            <ChatHeader
+                onToggleSidebar={onToggleSidebar}
+                isSidebarOpen={isSidebarOpen}
+                llmProvider={llmProvider}
+                onProviderChange={onProviderChange}
+            />
             <div className="flex-1 overflow-hidden flex flex-col bg-zinc-50/50">
-                {/* 
-                    MessageList usually handles its own scroll. 
-                    Ensure it takes available height.
-                 */}
                 <div className="flex-1 overflow-y-auto">
                     <MessageList messages={messages} />
                 </div>

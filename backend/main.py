@@ -3,9 +3,13 @@
 FastAPI Backend for Traffic Law Chatbot.
 Connects Next.js frontend with LLM and RAG modules.
 """
-import unsloth 
 
+# Import unsloth first ONLY if using local VLM (for optimizations)
 import os
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
+if LLM_PROVIDER == "local":
+    import unsloth  # noqa: F401
+
 import sys
 import base64
 import tempfile
@@ -49,6 +53,7 @@ class ChatRequest(BaseModel):
     text: str
     attachments: Optional[List[str]] = None  # base64 encoded images
     history: Optional[List[ChatMessage]] = None
+    provider: Optional[str] = "gemini"  # "gemini" or "local"
 
 
 class ChatResponse(BaseModel):
@@ -79,25 +84,25 @@ async def lifespan(app: FastAPI):
     
     # Load RAG models
     try:
-        from rag_law.rag.search import preload_models
+        from rag_law.rag.search import preload_models as preload_rag
         log.info("Loading RAG models...")
-        preload_models()
+        preload_rag()
         _rag_loaded = True
         log.info("RAG models loaded successfully")
     except Exception as e:
         log.warning(f"Failed to load RAG models: {e}")
         _rag_loaded = False
     
-    # Optionally load VLM
+    # Load LLM (Gemini or Local VLM)
     if USE_VLM:
         try:
-            from llm.llm_rag import get_model
-            log.info("Loading VLM model...")
-            get_model()
+            from llm.llm_rag import preload_models as preload_llm
+            log.info("Loading LLM models...")
+            preload_llm()
             _vlm_loaded = True
-            log.info("VLM model loaded successfully")
+            log.info("LLM models loaded successfully")
         except Exception as e:
-            log.warning(f"Failed to load VLM model: {e}")
+            log.warning(f"Failed to load LLM models: {e}")
             _vlm_loaded = False
     
     yield
@@ -187,7 +192,7 @@ async def chat(request: ChatRequest):
             except Exception as e:
                 log.warning(f"Failed to decode image: {e}")
         
-        # --- VLM + RAG Pipeline ---
+        # --- LLM + RAG Pipeline ---
         if _vlm_loaded and (temp_image_path or text):
             from llm.llm_rag import full_pipeline
             
@@ -195,6 +200,7 @@ async def chat(request: ChatRequest):
                 image_path=temp_image_path,
                 user_text=text,
                 top_k=5,
+                provider=request.provider,
             )
             
             if result.get("success"):

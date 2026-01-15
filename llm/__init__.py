@@ -1,24 +1,39 @@
 # -*- coding: utf-8 -*-
 """
-LLM module for Vision-Language Model integration with RAG.
+LLM module for Gemini API and Local VLM integration with RAG.
 """
 
 from .llm_rag import (
-    summarize_for_rag,
-    process_user_input,
+    # Core functions
+    generate,
     generate_answer,
+    summarize_for_rag,
     full_pipeline,
-    get_model,
+    
+    # Provider-specific
+    generate_with_gemini,
+    generate_with_local_vlm,
+    get_gemini_client,
+    get_local_model,
+    
+    # Utilities
     load_prompts,
-    VLMResponse,
+    preload_models,
+    
+    # Types
+    LLMResponse,
 )
 
 __all__ = [
-    "summarize_for_rag",
-    "process_user_input", 
+    "generate",
     "generate_answer",
+    "summarize_for_rag",
     "full_pipeline",
-    "get_model",
+    "generate_with_gemini",
+    "generate_with_local_vlm",
+    "get_gemini_client",
+    "get_local_model",
     "load_prompts",
-    "VLMResponse",
+    "preload_models",
+    "LLMResponse",
 ]

@@ -425,9 +425,10 @@ def full_pipeline(
     """
     Complete end-to-end pipeline.
     
-    1. Summarize user input into query (if image provided)
-    2. Search RAG with query
-    3. Generate final answer with context
+    Flow (ALWAYS the same, with or without image):
+    1. User Input → LLM to summarize key points for RAG query
+    2. Summarized query → RAG to get context
+    3. Original user input + RAG context → LLM for final answer
     
     Args:
         user_text: User's text question
@@ -443,41 +444,58 @@ def full_pipeline(
     
     from rag_law.rag.search import search_for_llm, search
     
-    # Step 1: Determine query
-    if image_path:
-        # Use VLM to summarize image + text
-        summary = summarize_for_rag(user_text=user_text, image_path=image_path, provider=provider)
-        if not summary.success:
-            return {
-                "success": False,
-                "error": summary.error,
-                "query": None,
-                "rag_results": [],
-                "context": "",
-                "answer": ""
-            }
-        query = summary.text
-    else:
-        # Text-only: use directly
-        query = user_text
+    # =========================================================================
+    # Step 1: LLM Summarize - Extract key points for RAG query
+    # =========================================================================
+    log.info(f"[Pipeline] Step 1: Summarizing user input with LLM ({provider or LLM_PROVIDER})")
     
-    log.info(f"RAG Query: {query[:100]}...")
+    summary = summarize_for_rag(
+        user_text=user_text,
+        image_path=image_path,
+        provider=provider,
+    )
     
-    # Step 2: Search RAG
-    results = search(query, top_k=top_k)
-    context = search_for_llm(query, top_k=top_k)
+    if not summary.success:
+        log.error(f"[Pipeline] Summarization failed: {summary.error}")
+        return {
+            "success": False,
+            "error": summary.error,
+            "query": None,
+            "rag_results": [],
+            "context": "",
+            "answer": ""
+        }
     
-    # Step 3: Generate answer
+    rag_query = summary.text.strip()
+    log.info(f"[Pipeline] Summarized query: {rag_query[:100]}...")
+    
+    # =========================================================================
+    # Step 2: RAG Search - Get relevant context
+    # =========================================================================
+    log.info(f"[Pipeline] Step 2: Searching RAG with summarized query")
+    
+    results = search(rag_query, top_k=top_k)
+    context = search_for_llm(rag_query, top_k=top_k)
+    
+    log.info(f"[Pipeline] RAG returned {len(results)} results")
+    
+    # =========================================================================
+    # Step 3: LLM Answer - Generate final response
+    # =========================================================================
+    log.info(f"[Pipeline] Step 3: Generating answer with LLM + RAG context")
+    
     answer = generate_answer(
-        question=user_text or query,
+        question=user_text,  # Use original user input, not summarized
         context=context,
         image_path=image_path,
         provider=provider,
     )
     
+    log.info(f"[Pipeline] Answer generated: {len(answer)} chars")
+    
     return {
         "success": True,
-        "query": query,
+        "query": rag_query,
         "rag_results": [
             {
                 "content": r.content,

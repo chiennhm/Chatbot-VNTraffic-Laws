@@ -3,7 +3,7 @@
 Qwen3-VL-8B Vision-Language Model for RAG Integration.
 Summarizes user input (image + text) for traffic law search.
 """
-
+from unsloth import FastVisionModel
 import os
 import json
 import logging
@@ -54,8 +54,6 @@ def get_model():
         return _model, _tokenizer
     
     log.info(f"Loading model: {MODEL_ID}")
-    
-    from unsloth import FastVisionModel
     
     if LORA_PATH and os.path.exists(LORA_PATH):
         log.info(f"Loading LoRA adapter from: {LORA_PATH}")

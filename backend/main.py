@@ -3,6 +3,7 @@
 FastAPI Backend for Traffic Law Chatbot.
 Connects Next.js frontend with LLM and RAG modules.
 """
+import unsloth 
 
 import os
 import sys

@@ -81,6 +81,7 @@ npm install
 ```bash
 cd backend
 python main.py
+#or using: uvicorn main:app --host 0.0.0.0 --port 8000
 # Server starts at http://localhost:8000
 ```
 

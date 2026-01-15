@@ -61,7 +61,7 @@ export default function ChatShell({
             />
             <div className="flex-1 overflow-hidden flex flex-col bg-zinc-50/50">
                 <div className="flex-1 overflow-y-auto">
-                    <MessageList messages={messages} />
+                    <MessageList messages={messages} isThinking={thinking} />
                 </div>
             </div>
             <ChatComposer onSend={handleSend} disabled={thinking} />

@@ -193,14 +193,17 @@ async def chat(request: ChatRequest):
                 log.warning(f"Failed to decode image: {e}")
         
         # --- LLM + RAG Pipeline ---
-        if _vlm_loaded and (temp_image_path or text):
+        provider = request.provider or "gemini"
+        log.info(f"Using LLM provider: {provider}")
+        
+        if _rag_loaded and (temp_image_path or text):
             from llm.llm_rag import full_pipeline
             
             result = full_pipeline(
                 image_path=temp_image_path,
                 user_text=text,
                 top_k=5,
-                provider=request.provider,
+                provider=provider,
             )
             
             if result.get("success"):

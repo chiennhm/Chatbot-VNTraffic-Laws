@@ -103,15 +103,17 @@ def generate_with_gemini(
         from google.genai import types
         
         client = get_gemini_client()
+        prompts = load_prompts()
+        gen_config = prompts.get("generation_config", {})
         
-        # Build contents
-        contents = []
+        # Build content parts (similar to local VLM)
+        content_parts = []
         
         # Add image if provided
         if image_path and os.path.exists(image_path):
             image_data = _image_to_base64(image_path)
             mime_type = _get_image_mime_type(image_path)
-            contents.append(
+            content_parts.append(
                 types.Part.from_bytes(
                     data=base64.b64decode(image_data),
                     mime_type=mime_type
@@ -119,12 +121,15 @@ def generate_with_gemini(
             )
         
         # Add text prompt
-        contents.append(prompt)
+        content_parts.append(types.Part.from_text(prompt))
+        
+        # Build user message
+        user_message = types.Content(
+            role="user",
+            parts=content_parts
+        )
         
         # Generate config
-        prompts = load_prompts()
-        gen_config = prompts.get("generation_config", {})
-        
         config = types.GenerateContentConfig(
             temperature=gen_config.get("temperature", 0.1),
             top_p=gen_config.get("top_p", 0.9),
@@ -135,15 +140,22 @@ def generate_with_gemini(
         if system_prompt:
             config.system_instruction = system_prompt
         
-        # Generate
+        # Generate response
         response = client.models.generate_content(
             model=GEMINI_MODEL,
-            contents=contents,
+            contents=[user_message],
             config=config,
         )
         
+        answer = response.text
+        
+        # Clean up thinking tags (same as local VLM)
+        if "<think>" in answer and "</think>" in answer:
+            think_end = answer.find("</think>") + len("</think>")
+            answer = answer[think_end:].strip()
+        
         return LLMResponse(
-            text=response.text,
+            text=answer,
             success=True
         )
         
@@ -287,10 +299,6 @@ def generate_with_local_vlm(
         )
 
 
-# =============================================================================
-# Unified Interface
-# =============================================================================
-
 def generate(
     prompt: str,
     system_prompt: Optional[str] = None,
@@ -309,18 +317,29 @@ def generate(
     Returns:
         LLMResponse with generated text
     """
-    provider = provider or LLM_PROVIDER
+    selected_provider = provider or LLM_PROVIDER
+    log.info(f"[LLM] Generating with provider: {selected_provider}")
+    log.info(f"[LLM] Prompt length: {len(prompt)} chars")
     
-    if provider == "gemini":
-        return generate_with_gemini(prompt, system_prompt, image_path)
-    elif provider == "local":
-        return generate_with_local_vlm(prompt, system_prompt, image_path)
+    if selected_provider == "gemini":
+        log.info("[LLM] Calling Gemini API...")
+        response = generate_with_gemini(prompt, system_prompt, image_path)
+    elif selected_provider == "local":
+        log.info("[LLM] Calling Local VLM...")
+        response = generate_with_local_vlm(prompt, system_prompt, image_path)
     else:
-        return LLMResponse(
+        response = LLMResponse(
             text="",
             success=False,
-            error=f"Unknown provider: {provider}"
+            error=f"Unknown provider: {selected_provider}"
         )
+    
+    if response.success:
+        log.info(f"[LLM] Response received: {len(response.text)} chars")
+    else:
+        log.error(f"[LLM] Generation failed: {response.error}")
+    
+    return response
 
 
 def generate_answer(

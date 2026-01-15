@@ -121,7 +121,7 @@ def generate_with_gemini(
             )
         
         # Add text prompt
-        content_parts.append(types.Part.from_text(prompt))
+        content_parts.append(types.Part.from_text(text=prompt))
         
         # Build user message
         user_message = types.Content(

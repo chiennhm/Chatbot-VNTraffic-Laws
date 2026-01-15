@@ -391,9 +391,41 @@ Hãy trả lời dựa trên thông tin pháp lý ở trên. Nếu không có th
     )
     
     if response.success:
-        return response.text
+        return _clean_llm_response(response.text)
     else:
         return f"Lỗi: {response.error}"
+
+
+def _clean_llm_response(text: str) -> str:
+    """
+    Clean LLM response by parsing XML tags and converting to readable format.
+    """
+    import re
+    
+    # Remove <think>...</think> tags
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+    
+    # Check if response has syllogism format
+    if '<answer>' in text and '</answer>' in text:
+        # Extract parts
+        major = re.search(r'<major_premise>(.*?)</major_premise>', text, re.DOTALL)
+        minor = re.search(r'<minor_premise>(.*?)</minor_premise>', text, re.DOTALL)
+        conclusion = re.search(r'<conclusion>(.*?)</conclusion>', text, re.DOTALL)
+        
+        parts = []
+        if major:
+            parts.append(f"**📜 Căn cứ pháp lý:**\n{major.group(1).strip()}")
+        if minor:
+            parts.append(f"**📝 Phân tích:**\n{minor.group(1).strip()}")
+        if conclusion:
+            parts.append(f"**✅ Kết luận:**\n{conclusion.group(1).strip()}")
+        
+        if parts:
+            return "\n\n".join(parts)
+    
+    # Fallback: just remove all XML-like tags
+    text = re.sub(r'<[^>]+>', '', text)
+    return text.strip()
 
 
 def summarize_for_rag(

@@ -129,8 +129,9 @@ def summarize_for_rag(
                 return_tensors="pt",
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         else:
+            # Text-only: use text= kwarg to avoid confusion with image input
             inputs = tokenizer(
-                input_text,
+                text=input_text,
                 add_special_tokens=False,
                 return_tensors="pt",
             ).to("cuda" if torch.cuda.is_available() else "cpu")
@@ -141,9 +142,11 @@ def summarize_for_rag(
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=gen_config.get("max_new_tokens", 256),
-                temperature=gen_config.get("temperature", 0.7),
-                min_p=gen_config.get("min_p", 0.1),
+                temperature=gen_config.get("temperature", 0.2),
+                top_p=gen_config.get("top_p", 0.8),
                 do_sample=gen_config.get("do_sample", True),
+                repetition_penalty=gen_config.get("repetition_penalty", 1.15),
+                no_repeat_ngram_size=gen_config.get("no_repeat_ngram_size", 4),
                 use_cache=True,
             )
         
@@ -290,8 +293,9 @@ Hãy trả lời câu hỏi dựa trên thông tin pháp lý ở trên. Trích d
                 return_tensors="pt",
             ).to("cuda" if torch.cuda.is_available() else "cpu")
         else:
+            # Text-only: use text= kwarg to avoid confusion with image input
             inputs = tokenizer(
-                input_text,
+                text=input_text,
                 add_special_tokens=False,
                 return_tensors="pt",
             ).to("cuda" if torch.cuda.is_available() else "cpu")
@@ -300,10 +304,12 @@ Hãy trả lời câu hỏi dựa trên thông tin pháp lý ở trên. Trích d
         with torch.no_grad():
             outputs = model.generate(
                 **inputs,
-                max_new_tokens=gen_config.get("max_new_tokens", 512),
-                temperature=gen_config.get("temperature", 0.7),
-                min_p=gen_config.get("min_p", 0.1),
+                max_new_tokens=gen_config.get("max_new_tokens", 1500),
+                temperature=gen_config.get("temperature", 0.2),
+                top_p=gen_config.get("top_p", 0.8),
                 do_sample=gen_config.get("do_sample", True),
+                repetition_penalty=gen_config.get("repetition_penalty", 1.15),
+                no_repeat_ngram_size=gen_config.get("no_repeat_ngram_size", 4),
                 use_cache=True,
             )
         

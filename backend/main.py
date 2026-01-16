@@ -199,11 +199,20 @@ async def chat(request: ChatRequest):
         if _rag_loaded and (temp_image_path or text):
             from llm.llm_rag import full_pipeline
             
+            # Convert history to simple dict format for LLM
+            history_for_llm = None
+            if history:
+                history_for_llm = [
+                    {"role": msg.role, "text": msg.text}
+                    for msg in history[-3:]  # Only last 6 messages
+                ]
+            
             result = full_pipeline(
                 image_path=temp_image_path,
                 user_text=text,
                 top_k=5,
                 provider=provider,
+                chat_history=history_for_llm,
             )
             
             if result.get("success"):

@@ -347,6 +347,7 @@ def generate_answer(
     context: str,
     image_path: Optional[str] = None,
     provider: Optional[str] = None,
+    chat_history: Optional[list] = None,
 ) -> str:
     """
     Generate answer for user question with RAG context.
@@ -356,6 +357,7 @@ def generate_answer(
         context: Retrieved context from RAG
         image_path: Optional image for reference
         provider: LLM provider ("gemini" or "local")
+        chat_history: Optional list of previous messages [{"role": "user"/"assistant", "text": "..."}]
     
     Returns:
         Generated answer string
@@ -369,10 +371,19 @@ def generate_answer(
     syllogism_instruction = syllogism.get("instruction", "")
     syllogism_template = syllogism.get("template", "")
     
-    full_prompt = f"""### THÔNG TIN PHÁP LÝ TỪ CƠ SỞ DỮ LIỆU:
+    # Build conversation history context
+    history_text = ""
+    if chat_history and len(chat_history) > 0:
+        history_text = "### LỊCH SỬ HỘI THOẠI:\n"
+        for msg in chat_history[-6:]:  # Only use last 6 messages
+            role = "Người dùng" if msg.get("role") == "user" else "Trợ lý"
+            history_text += f"{role}: {msg.get('text', '')}\n"
+        history_text += "\n"
+    
+    full_prompt = f"""{history_text}### THÔNG TIN PHÁP LÝ TỪ CƠ SỞ DỮ LIỆU:
 {context}
 
-### CÂU HỎI CỦA NGƯỜI DÙNG:
+### CÂU HỎI HIỆN TẠI:
 {question}
 
 ### HƯỚNG DẪN TRẢ LỜI:
@@ -381,7 +392,7 @@ def generate_answer(
 Định dạng:
 {syllogism_template}
 
-Hãy trả lời dựa trên thông tin pháp lý ở trên. Nếu không có thông tin, nói rõ."""
+Hãy trả lời dựa trên thông tin pháp lý ở trên và ngữ cảnh hội thoại. Nếu không có thông tin, nói rõ."""
 
     response = generate(
         prompt=full_prompt,
@@ -442,18 +453,37 @@ def summarize_for_rag(
         provider: LLM provider ("gemini" or "local")
     
     Returns:
-        LLMResponse with summarized query
+        LLMResponse with summarized query (keywords only)
     """
     prompts = load_prompts()
-    instruction = prompts["summarize_for_rag"]["instruction"]
+    summarize_config = prompts["summarize_for_rag"]
+    instruction = summarize_config["instruction"]
+    examples = summarize_config.get("examples", [])
+    system_prompt = summarize_config.get("system_prompt", "")
+    
+    # Build examples string
+    examples_text = ""
+    for ex in examples[:3]:  # Only use first 3 examples
+        examples_text += f"\nInput: {ex['input']}\nOutput: {ex['output']}\n"
     
     if user_text:
-        prompt = f"{instruction}\n\nCâu hỏi của người dùng: {user_text}"
+        prompt = f"""{instruction}
+
+VÍ DỤ:{examples_text}
+
+CÂU HỎI: {user_text}
+
+TỪ KHÓA:"""
     else:
-        prompt = instruction
+        prompt = f"""{instruction}
+
+Mô tả hình ảnh và trích xuất từ khóa pháp lý liên quan.
+
+TỪ KHÓA:"""
     
     return generate(
         prompt=prompt,
+        system_prompt=system_prompt,
         image_path=image_path,
         provider=provider,
     )
@@ -464,6 +494,7 @@ def full_pipeline(
     image_path: Optional[str] = None,
     top_k: int = 5,
     provider: Optional[str] = None,
+    chat_history: Optional[list] = None,
 ) -> Dict[str, Any]:
     """
     Complete end-to-end pipeline.
@@ -471,13 +502,14 @@ def full_pipeline(
     Flow (ALWAYS the same, with or without image):
     1. User Input → LLM to summarize key points for RAG query
     2. Summarized query → RAG to get context
-    3. Original user input + RAG context → LLM for final answer
+    3. Original user input + RAG context + history → LLM for final answer
     
     Args:
         user_text: User's text question
         image_path: Optional path to image file
         top_k: Number of RAG results
         provider: LLM provider ("gemini" or "local")
+        chat_history: Optional list of previous messages [{"role": "user"/"assistant", "text": "..."}]
     
     Returns:
         Dict with query, context, rag_results, and answer
@@ -533,6 +565,7 @@ def full_pipeline(
         context=context,
         image_path=image_path,
         provider=provider,
+        chat_history=chat_history,
     )
     
     log.info(f"[Pipeline] Answer generated: {len(answer)} chars")

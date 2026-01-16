@@ -85,6 +85,7 @@ rag_law/processing/merge_vlsp_chunks.py
 rag_law/processing/process_qcvn.py
 rag_law/rag/qdrant_rag.py
 rag_law/check_split.py
+COST.md
 
 # ========================================
 # Testing & Coverage

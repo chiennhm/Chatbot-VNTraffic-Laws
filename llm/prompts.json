@@ -39,7 +39,7 @@
         "template": "<think>[Suy nghĩ về vấn đề]</think>\n\n<answer>\n<major_premise>[Quy định pháp luật chung từ context]</major_premise>\n<minor_premise>[Sự kiện cụ thể trong câu hỏi]</minor_premise>\n<conclusion>[Áp dụng quy định vào sự kiện để đưa ra kết luận]</conclusion>\n</answer>"
     },
     "generation_config": {
-        "max_new_tokens": 2048,
+        "max_new_tokens": 4096,
         "temperature": 0.1,
         "top_p": 0.9,
         "do_sample": true,

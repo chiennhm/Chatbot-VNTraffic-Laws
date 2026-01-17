@@ -201,10 +201,10 @@ async def chat(request: ChatRequest):
             
             # Convert history to simple dict format for LLM
             history_for_llm = None
-            if history:
+            if request.history:
                 history_for_llm = [
                     {"role": msg.role, "text": msg.text}
-                    for msg in history[-3:]  # Only last 6 messages
+                    for msg in request.history[-6:]  # Only last 6 messages
                 ]
             
             result = full_pipeline(
